@@ -1,0 +1,9 @@
+# nvcc compiled outputs
+*.exe
+*.out
+a.out
+
+# nvcc intermediate files
+*.o
+*.ptx
+*.cubin
