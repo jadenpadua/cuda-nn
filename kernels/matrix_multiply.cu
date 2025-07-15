@@ -1,4 +1,4 @@
-// Basic matrix multiplication kernel
+// Basic matrix multiplication kernel, parallelize such that each thread computes an element c (dot prod of a row A, col B) in result C matrix
 // C = A * B
 // A: M x K matrix
 // B: K x N matrix
@@ -7,6 +7,25 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// each thread will compute one element of the output matrix C which is dot product of a row A, col B
+__global__ void matrix_multiply(float* A, float* B, float* C, int M, int K, int N) {
+    // calc so that each thread gets a unique (row, col) coordinate
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    // Check bounds since we may have more threads than elements in the matrix
+    if (row < M && col < N) {
+        // compute one matrix element
+        float sum = 0.0f;
+        // dot product of row of A and column of B
+        for (int k = 0; k < K; k++) {
+            // both A and B are 1D flat arrays so access like this
+            sum += A[row * K + k] * B[k * N + col];
+        }
+        // Store result in 1D flattened array
+        C[row * N + col] = sum;
+    }
+}
+
 void initialize_matrix(float* matrix, int rows, int cols) {
     // matrices are stored as flat 1D arrays in CUDA
     for (int i = 0; i < rows * cols; i++) {
@@ -14,10 +33,20 @@ void initialize_matrix(float* matrix, int rows, int cols) {
     }
 }
 
+void print_matrix(float* matrix, int rows, int cols, const char* name) {
+    printf("\n%s:\n", name);
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            printf("%.2f ", matrix[i * cols + j]);
+        }
+        printf("\n");
+    }
+}
+
 int main() {
-    const int M = 512;
-    const int K = 256;
-    const int N = 512;
+    const int M = 8;
+    const int K = 8;
+    const int N = 8;
     // calc each matrix size in bytes
     size_t size_A = M * K * sizeof(float);
     size_t size_B = K * N * sizeof(float);
@@ -40,7 +69,8 @@ int main() {
     // since we're in 2D grid we must defined 2D block and grid dimensions
     dim3 blockDim(16, 16); // 16x16 = 256 threads per block
     dim3 gridDim((N + blockDim.x - 1) / blockDim.x, (M + blockDim.y - 1) / blockDim.y);
-    // TODO: launch kernel 
+
+    matrix_multiply<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, K, N);
 
     cudaDeviceSynchronize();
 
@@ -51,7 +81,15 @@ int main() {
     }
 
     cudaMemcpy(h_C, d_C, size_C, cudaMemcpyDeviceToHost);
-    // TODO: print small examples and verify
+    
+    if (M <= 8 && N <= 8) {
+        print_matrix(h_A, M, K, "Matrix A");
+        print_matrix(h_B, K, N, "Matrix B");
+        print_matrix(h_C, M, N, "Matrix C (Result)");
+    }
+    else {
+        printf("Matrix multiplication completed successfully.\n");
+    }
 
     // Cleanup
     free(h_A);
