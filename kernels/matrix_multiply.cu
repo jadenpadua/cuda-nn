@@ -43,6 +43,31 @@ void print_matrix(float* matrix, int rows, int cols, const char* name) {
     }
 }
 
+float time_kernel(void (*kernel)(float*, float*, float*, int, int, int), 
+    float* d_A, float* d_B, float* d_C, int M, int K, int N, 
+    dim3 gridDim, dim3 blockDim) {
+    // create events to measure time
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    // record start time
+    cudaEventRecord(start);
+    // launch the kernel
+    kernel<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, K, N);
+    // record stop time
+    cudaEventRecord(stop);
+    // Wait for kernel to complete
+    cudaEventSynchronize(stop);
+    // Calculate elapsed time
+    float milliseconds = 0;
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    // Cleanup events
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+
+    return milliseconds;
+}
+
 int main() {
     const int M = 8;
     const int K = 8;
@@ -73,6 +98,9 @@ int main() {
     matrix_multiply<<<gridDim, blockDim>>>(d_A, d_B, d_C, M, K, N);
 
     cudaDeviceSynchronize();
+    // Time the kernel execution after warmup
+    float kernel_time = time_kernel(matrix_multiply, d_A, d_B, d_C, M, K, N, gridDim, blockDim);
+    printf("Kernel execution time: %.2f ms\n", kernel_time);
 
     cudaError_t error = cudaGetLastError();
     if (error != cudaSuccess) {
