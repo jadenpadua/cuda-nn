@@ -46,13 +46,6 @@ __global__ void matrix_multipl_tiled(float* A, float* B, float* C, int M, int K,
         // synchronize threads before loading next tile
         __syncthreads();
     }
-
-
-
-
-
-
-
     // Check bounds since we may have more threads than elements in the matrix
     if (row < M && col < N) {
         // compute one matrix element
